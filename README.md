@@ -4,7 +4,7 @@
 We wish to find the topics in a large group of documents using the Spark LDA Implementation. 
 The eventual target documents are mostly text (i.e. email threads), so they need to be tokenized & hashed. <br>
 To accomplish this, the corpus documents are tokenized (with stop words removed) loaded into vectors. 
-After that, an LDA model is trained with a user-specified number of topics (default is 10). The 
+After that, an LDA model is trained with a user-specified number of topics (default is 10). Tokens in each topic are shown & 20% of the data is reserved to evaluate the clustering with the perplexity metric.
 
 ## prepare the environment
 git clone https://github.com/joebluems/LDASparkTopicModels.git<br>
