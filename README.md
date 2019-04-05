@@ -77,5 +77,7 @@ Area-under-ROC = 0.880782447792757 <br>
 +------+-----------------------------------------------------------------+<br>
 only showing top 10 rows<br>
 
+<b>Usage: spark-submit --class com.mapr.sentiment.Main ./target/scala-2.11/topicmodeling_2.11-0.1-SNAPSHOT.jar  <positive_files> <negative_files> <corpus_file_location> </b> <br>
+Running with three arguments allows you to specify the location of the positive & negative examples, plus the corpus to be scored for sentiment. <br>
 
 <br>
