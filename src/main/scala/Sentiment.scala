@@ -15,18 +15,24 @@ import org.apache.log4j.Level
 
 object Main extends App { 
   Logger.getLogger("org").setLevel(Level.WARN)
+  var posFile = "./movie_reviews/pos"
+  var negFile = "./movie_reviews/neg"
   var corpusFile = "./documents"
     
-  if (args.length == 1) {
-      corpusFile = args(0)
+  if (args.length == 3) {
+      posFile = args(0)
+      negFile = args(1)
+      corpusFile = args(2)
   }
 
   val spark = SparkSession.builder.master("local").appName("example").getOrCreate()
   import spark.implicits._
 
   /// load the documents - assume random tag for now
-  val dataset = spark.sparkContext.wholeTextFiles(corpusFile).toDF("filename","doc")
-  val df1 = dataset.withColumn("target", when(rand() > 0.5, 1).otherwise(0))
+  val pos = spark.sparkContext.wholeTextFiles(posFile).toDF("filename","doc").withColumn("target", lit(1))
+  val neg = spark.sparkContext.wholeTextFiles(negFile).toDF("filename","doc").withColumn("target", lit(0))
+  val toscore = spark.sparkContext.wholeTextFiles(corpusFile).toDF("filename","doc").withColumn("target", lit(0))
+  val df1 = pos.unionAll(neg);
   val splits = df1.randomSplit(Array(0.8, 0.2), 15L)
   val (train, test) = (splits(0), splits(1))
   val vocabSize = 1000
@@ -59,9 +65,10 @@ object Main extends App {
   println(s"Accuracy on test set = $accuracy")
   println(s"Area-under-ROC = $auc")
 
-  //// show top 5 highest sentiment
+  //// show top 10 highest sentiment
   val vecToSeq = udf((v: Vector) => v.toArray)
-  val scores = predictions.withColumn("score", vecToSeq($"probability").getItem(1) )
-  scores.sort(desc("score")).select("score","filename").withColumn("score",format_number($"score",4)).show(5,false)
+  val newscores = model.transform(toscore)
+  val newsentiment = newscores.withColumn("score", vecToSeq($"probability").getItem(1) )
+  newsentiment.sort(desc("score")).select("score","filename").withColumn("score",format_number($"score",4)).show(10,false)
   
 }

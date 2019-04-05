@@ -12,8 +12,10 @@ import org.apache.spark.ml.linalg.Vector
 
 
 import spark.implicits._
-val dataset = spark.sparkContext.wholeTextFiles("./documents").toDF("filename","doc")
-val df1 = dataset.withColumn("target", when(rand() > 0.5, 1).otherwise(0))
+val pos = spark.sparkContext.wholeTextFiles("./movie_reviews/pos").toDF("filename","doc").withColumn("target", lit(1))
+val neg = spark.sparkContext.wholeTextFiles("./movie_reviews/neg").toDF("filename","doc").withColumn("target", lit(0))
+val toscore = spark.sparkContext.wholeTextFiles("./documents").toDF("filename","doc").withColumn("target", lit(0))
+val df1 = pos.unionAll(neg);
 val splits = df1.randomSplit(Array(0.8, 0.2), 15L)
 val (train, test) = (splits(0), splits(1))
 val vocabSize = 1000
@@ -46,8 +48,8 @@ val auc = evaluatorAUROC.evaluate(predictions)
 println(s"Accuracy = $accuracy")
 println(s"ROC = $auc")
 
-//// show top 5 highest sentiment
-val vecToSeq = udf((v: Vector) => v.toArray)
-val scores = predictions.withColumn("score", vecToSeq($"probability").getItem(1) )
-scores.sort(desc("score")).select("score","filename").withColumn("score",format_number($"score",4)).show(5,false)
 
+/// use model on new data
+val newscores = model.transform(toscore)
+val newsentiment = newscores.withColumn("score", vecToSeq($"probability").getItem(1) )
+newsentiment.sort(desc("score")).select("score","filename").withColumn("score",format_number($"score",4)).show(10,false)
