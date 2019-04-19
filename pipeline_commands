@@ -29,15 +29,6 @@ def buildModel(dataset: DataFrame, k: Int, maxIter: Int): LDAModel = {
 }
 
 
-def showTopics(spark: SparkSession, vocab: Array[String], ldaModel: LDAModel): Unit = {
-    import spark.implicits._
-    val bc = spark.sparkContext.broadcast(vocab)
-    val topicWords = udf { (indices: mutable.WrappedArray[_]) =>
-      indices.map { case v: Int => bc.value(v) }
-    }
-    ldaModel.describeTopics().select(topicWords($"termIndices").as("topics")).show(false)
-}
-
 import spark.implicits._
 val dataset = spark.sparkContext.wholeTextFiles("./documents").toDF("filename","doc")
 val splits = dataset.randomSplit(Array(0.8, 0.2), 15L)
@@ -48,7 +39,24 @@ val iter = 10
 val (dataprep, vocab) = buildDataPrepPipeline(train, vocabSize)
 val vectorized = dataprep.transform(train)
 val ldaModel = buildModel(vectorized, k, iter)
-showTopics(spark, vocab, ldaModel)
 
+/// evaluation
 val testVect = dataprep.transform(test)
 val perplexity = ldaModel.logPerplexity(ldaModel.transform(testVect))
+
+/// save topics
+val bc = spark.sparkContext.broadcast(vocab)
+val topicWords = udf { (indices: mutable.WrappedArray[_]) =>
+      indices.map { case v: Int => bc.value(v) }
+}
+val topicsOutput = ldaModel.describeTopics().select(topicWords($"termIndices").as("topics"))
+topicsOutput.show()
+
+val stringify = udf((vs: Seq[String]) => vs match {
+  case null => null
+  case _    => s"""[${vs.mkString(",")}]"""
+})
+
+topicsOutput.withColumn("topics", stringify($"topics")).write.text("topicsOut")
+
+
