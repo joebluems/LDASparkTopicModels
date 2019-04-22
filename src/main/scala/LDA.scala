@@ -13,13 +13,15 @@ import org.apache.log4j.Level
 object Main extends App { 
   Logger.getLogger("org").setLevel(Level.WARN)
   var corpusFile = "./documents"
-  val vocabSize = 1000 // total vocabulary size
   var k = 10  // number of topics
+  var outputFile = "./topicsOut"
+  val vocabSize = 1000 // total vocabulary size
   val iter = 10 // iterations
     
-  if (args.length == 2) {
+  if (args.length == 3) {
       corpusFile = args(0)
       k = args(1).toInt
+      outputFile = args(2)
   }
 
   val spark = SparkSession.builder.master("local").appName("example").getOrCreate()
@@ -47,15 +49,6 @@ object Main extends App {
     lda.fit(dataset)
   }
 
-  def showTopics(spark: SparkSession, vocab: Array[String], ldaModel: LDAModel): Unit = {
-    import spark.implicits._
-    val bc = spark.sparkContext.broadcast(vocab)
-    val topicWords = udf { (indices: mutable.WrappedArray[_]) =>
-      indices.map { case v: Int => bc.value(v) }
-    }
-    ldaModel.describeTopics().select(topicWords($"termIndices").as("topics")).show(false)
-  }
-
   /// load the corpus of documents and split into train/test
   val dataset = spark.sparkContext.wholeTextFiles(corpusFile).toDF("filename","doc")
   val splits = dataset.randomSplit(Array(0.8, 0.2), 15L)
@@ -67,9 +60,22 @@ object Main extends App {
   val ldaModel = buildModel(vectorized, k, iter)
 
   /// print out the topics and perplexity on test data
-  showTopics(spark, vocab, ldaModel)
   val testVect = dataprep.transform(test)
   val perplexity = ldaModel.logPerplexity(ldaModel.transform(testVect))
   println(s"Perplexity=$perplexity")
+
+  /// save topics
+  val bc = spark.sparkContext.broadcast(vocab)
+  val topicWords = udf { (indices: mutable.WrappedArray[_]) =>
+      indices.map { case v: Int => bc.value(v) }
+  }
+  val topicsOutput = ldaModel.describeTopics().select(topicWords($"termIndices").as("topics"))
+
+  val stringify = udf((vs: Seq[String]) => vs match {
+    case null => null
+    case _    => s"""[${vs.mkString(",")}]"""
+  })
+
+  topicsOutput.withColumn("topics", stringify($"topics")).write.text(outputFile)
 
 }
