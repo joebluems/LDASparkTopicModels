@@ -18,11 +18,13 @@ object Main extends App {
   var posFile = "./movie_reviews/pos"
   var negFile = "./movie_reviews/neg"
   var corpusFile = "./documents"
+  var outputFile = "./scores"
     
-  if (args.length == 3) {
+  if (args.length == 4) {
       posFile = args(0)
       negFile = args(1)
       corpusFile = args(2)
+      outputFile = args(3)
   }
 
   val spark = SparkSession.builder.master("local").appName("example").getOrCreate()
@@ -70,5 +72,7 @@ object Main extends App {
   val newscores = model.transform(toscore)
   val newsentiment = newscores.withColumn("score", vecToSeq($"probability").getItem(1) )
   newsentiment.sort(desc("score")).select("score","filename").withColumn("score",format_number($"score",4)).show(10,false)
-  
+
+  newsentiment.select("score","filename").withColumn("score",format_number($"score",4)).write.csv(outputFile)
+
 }
